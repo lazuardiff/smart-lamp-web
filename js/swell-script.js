@@ -83,6 +83,13 @@ function initializeDeviceDetailPage() {
                         deviceImage.src = "media/icons/ActiveDevice.png";
                     }
 
+                    // Add connected class and remove disconnected class
+                    const deviceCard = document.querySelector('.device-card');
+                    if (deviceCard) {
+                        deviceCard.classList.add('connected');
+                        deviceCard.classList.remove('disconnected');
+                    }
+
                     // Enable controls
                     enableControls();
 
@@ -92,13 +99,20 @@ function initializeDeviceDetailPage() {
                     }
                 } else {
                     // Device exists but not currently connected
-                    if (deviceNameElement) deviceNameElement.textContent = `${deviceName || deviceId} (Offline)`;
+                    if (deviceNameElement) deviceNameElement.textContent = `${deviceName || deviceId}`;
                     if (deviceStatusElement) deviceStatusElement.textContent = "Device disconnected";
 
                     // Set inactive device image
                     const deviceImage = document.querySelector('.device-card .device-img');
                     if (deviceImage) {
                         deviceImage.src = "media/icons/NotActiveDevice.png";
+                    }
+
+                    // Add disconnected class and remove connected class
+                    const deviceCard = document.querySelector('.device-card');
+                    if (deviceCard) {
+                        deviceCard.classList.add('disconnected');
+                        deviceCard.classList.remove('connected');
                     }
 
                     // Disable all toggles when device is offline
@@ -115,6 +129,13 @@ function initializeDeviceDetailPage() {
                 const deviceImage = document.querySelector('.device-card .device-img');
                 if (deviceImage) {
                     deviceImage.src = "media/icons/NotActiveDevice.png";
+                }
+
+                // Add disconnected class for error state
+                const deviceCard = document.querySelector('.device-card');
+                if (deviceCard) {
+                    deviceCard.classList.add('disconnected');
+                    deviceCard.classList.remove('connected');
                 }
 
                 // Disable all toggles

@@ -119,8 +119,8 @@ void getDeviceState()
 {
     HTTPClient http;
 
-    // Specify request destination
-    String url = String(serverUrl) + "/api/esp32/status";
+    // Specify request destination with device ID
+    String url = String(serverUrl) + "/api/esp32/status/" + WiFi.macAddress();
     http.begin(url);
 
     // Send GET request
@@ -248,7 +248,7 @@ void registerWithServer()
 
     // Create JSON payload with device info
     DynamicJsonDocument doc(1024);
-    doc["deviceId"] = WiFi.macAddress(); // Use MAC address as unique ID
+    doc["deviceId"] = WiFi.macAddress();
     doc["deviceName"] = deviceName;
     doc["deviceType"] = deviceType;
     doc["deviceModel"] = deviceModel;

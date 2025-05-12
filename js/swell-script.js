@@ -24,13 +24,24 @@ function createStars() {
 
 // Device detail page specific functions
 function initializeDeviceDetailPage() {
+    // Get the device ID from the URL or fallback to localStorage
+    const urlParams = new URLSearchParams(window.location.search);
+    const deviceId = urlParams.get('deviceId') || localStorage.getItem('connectedDevice');
+
+    // Try to get name from connected devices array first
+    let deviceName = null;
+    const connectedDevices = JSON.parse(localStorage.getItem('connectedDevices') || '[]');
+    const deviceInfo = connectedDevices.find(d => d.id === deviceId);
+    if (deviceInfo) {
+        deviceName = deviceInfo.name;
+    } else {
+        // Fall back to legacy storage
+        deviceName = localStorage.getItem('connectedDeviceName');
+    }
+
     // Get device info elements
     const deviceNameElement = document.querySelector('.device-card .device-name');
     const deviceStatusElement = document.querySelector('.device-card .device-status');
-
-    // Get the connected device from localStorage
-    const deviceId = localStorage.getItem('connectedDevice');
-    const deviceName = localStorage.getItem('connectedDeviceName');
 
     console.log("Device detail page - Checking device:", deviceId, deviceName);
 
@@ -66,6 +77,12 @@ function initializeDeviceDetailPage() {
                     if (deviceNameElement) deviceNameElement.textContent = deviceName || deviceId;
                     if (deviceStatusElement) deviceStatusElement.textContent = "Connected via HTTP";
 
+                    // Set active device image
+                    const deviceImage = document.querySelector('.device-card .device-img');
+                    if (deviceImage) {
+                        deviceImage.src = "media/icons/ActiveDevice.png";
+                    }
+
                     // Enable controls
                     enableControls();
 
@@ -76,7 +93,13 @@ function initializeDeviceDetailPage() {
                 } else {
                     // Device exists but not currently connected
                     if (deviceNameElement) deviceNameElement.textContent = `${deviceName || deviceId} (Offline)`;
-                    if (deviceStatusElement) deviceStatusElement.textContent = "ESP32 disconnected";
+                    if (deviceStatusElement) deviceStatusElement.textContent = "Device disconnected";
+
+                    // Set inactive device image
+                    const deviceImage = document.querySelector('.device-card .device-img');
+                    if (deviceImage) {
+                        deviceImage.src = "media/icons/NotActiveDevice.png";
+                    }
 
                     // Disable all toggles when device is offline
                     disableControls();
@@ -87,6 +110,12 @@ function initializeDeviceDetailPage() {
                 // Show device as offline if we can't reach the server
                 if (deviceNameElement) deviceNameElement.textContent = `${deviceName || deviceId} (Unreachable)`;
                 if (deviceStatusElement) deviceStatusElement.textContent = "Connection error";
+
+                // Set inactive device image on error
+                const deviceImage = document.querySelector('.device-card .device-img');
+                if (deviceImage) {
+                    deviceImage.src = "media/icons/NotActiveDevice.png";
+                }
 
                 // Disable all toggles
                 disableControls();
@@ -352,6 +381,15 @@ function initializeDeviceDetailPage() {
             volumePopup.style.opacity = '1';
         });
     }
+
+    // Add back button event handler
+    const backButton = document.querySelector('.back-button');
+    if (backButton) {
+        backButton.addEventListener('click', function (e) {
+            e.preventDefault();
+            window.location.href = 'swell-homepage.html';
+        });
+    }
 }
 
 // Homepage specific functions
@@ -361,6 +399,14 @@ function initializeHomePage() {
     const closeModal = document.querySelector('.close-modal');
     const discoveredDevices = document.getElementById('discovered-devices');
     const deviceList = document.getElementById('device-list');
+
+    // Track connected devices in an array
+    let connectedDevices = JSON.parse(localStorage.getItem('connectedDevices') || '[]');
+
+    // Function to save connected devices to localStorage
+    function saveConnectedDevices() {
+        localStorage.setItem('connectedDevices', JSON.stringify(connectedDevices));
+    }
 
     // Show connection modal when Add Device is clicked
     if (addDeviceBtn) {
@@ -470,39 +516,34 @@ function initializeHomePage() {
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    // IMPORTANT: Save both values to localStorage BEFORE updating the UI
+                    // Add to connected devices array
+                    const existingDeviceIndex = connectedDevices.findIndex(d => d.id === deviceId);
+
+                    if (existingDeviceIndex >= 0) {
+                        // Update existing device
+                        connectedDevices[existingDeviceIndex] = {
+                            id: deviceId,
+                            name: deviceName || deviceId
+                        };
+                    } else {
+                        // Add new device
+                        connectedDevices.push({
+                            id: deviceId,
+                            name: deviceName || deviceId
+                        });
+                    }
+
+                    // Save to localStorage
+                    saveConnectedDevices();
+
+                    // For backward compatibility
                     localStorage.setItem('connectedDevice', deviceId);
                     localStorage.setItem('connectedDeviceName', deviceName || deviceId);
 
-                    console.log("Device connected and saved to localStorage:", deviceId);
+                    console.log("Device connected and saved:", deviceId);
 
-                    // Update UI to show connected device with delete option
-                    deviceList.innerHTML = `
-                    <div class="device-container">
-                        <a href="swell-device-detail.html" class="device-link">
-                            <div class="device-card connected" data-id="${deviceId}">
-                                <div class="device-icon">
-                                    <img src="media/icons/ActiveDevice.png" alt="Lamp" class="device-img">
-                                </div>
-                                <div class="device-info">
-                                    <div class="device-name">${deviceName || deviceId}</div>
-                                    <div class="device-status">Connected via WiFi</div>
-                                </div>
-                            </div>
-                        </a>
-                        <button class="remove-device-btn" data-id="${deviceId}">✕</button>
-                    </div>
-                    `;
-
-                    // Add event listener to remove button
-                    const removeBtn = deviceList.querySelector('.remove-device-btn');
-                    if (removeBtn) {
-                        removeBtn.addEventListener('click', (e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            removeDevice(deviceId);
-                        });
-                    }
+                    // Update UI with all connected devices
+                    refreshDeviceList();
 
                     // Close the modal
                     connectionModal.classList.remove('active');
@@ -520,13 +561,23 @@ function initializeHomePage() {
     function removeDevice(deviceId) {
         // Show confirmation dialog
         if (confirm(`Are you sure you want to disconnect ${deviceId}?`)) {
-            // Remove from localStorage
-            localStorage.removeItem('connectedDevice');
+            // Remove from connected devices array
+            connectedDevices = connectedDevices.filter(d => d.id !== deviceId);
+            saveConnectedDevices();
 
-            // Update UI to show no devices
-            deviceList.innerHTML = `<div class="no-devices">No devices connected</div>`;
+            // For compatibility with pages expecting single device
+            if (connectedDevices.length > 0) {
+                localStorage.setItem('connectedDevice', connectedDevices[0].id);
+                localStorage.setItem('connectedDeviceName', connectedDevices[0].name);
+            } else {
+                localStorage.removeItem('connectedDevice');
+                localStorage.removeItem('connectedDeviceName');
+            }
 
-            // In a real implementation, make API call to disconnect the device
+            // Update UI
+            refreshDeviceList();
+
+            // Notify server
             fetch(`/api/device/${deviceId}/disconnect`, {
                 method: 'POST',
                 headers: {
@@ -538,46 +589,98 @@ function initializeHomePage() {
         }
     }
 
-    // Check if we have a previously connected device
-    const savedDevice = localStorage.getItem('connectedDevice');
-    const savedDeviceName = localStorage.getItem('connectedDeviceName');
-    if (savedDevice) {
-        // If we have a saved device, show it initially with "checking status..."
-        deviceList.innerHTML = `
-            <div class="device-container">
-                <a href="swell-device-detail.html" class="device-link">
-                    <div class="device-card" data-id="${savedDevice}">
+    // Function to refresh the device list UI with current devices
+    function refreshDeviceList() {
+        if (connectedDevices.length === 0) {
+            deviceList.innerHTML = `<div class="no-devices">No devices connected</div>`;
+
+            // Remove any multi-device classes
+            deviceList.classList.remove('multi-device');
+            deviceList.classList.remove('multi-device-2-plus');
+            deviceList.classList.remove('multi-device-3-plus');
+
+            // Ensure add button has full width
+            const addButton = document.getElementById('add-device-btn');
+            if (addButton) {
+                addButton.style.width = '100%';
+                addButton.style.marginLeft = '0';
+            }
+
+            return;
+        }
+
+        // Clear existing list
+        deviceList.innerHTML = '';
+
+        // Add correct multi-device classes based on number of devices
+        if (connectedDevices.length > 0) {
+            deviceList.classList.add('multi-device');
+
+            if (connectedDevices.length >= 2) {
+                deviceList.classList.add('multi-device-2-plus');
+            } else {
+                deviceList.classList.remove('multi-device-2-plus');
+            }
+
+            if (connectedDevices.length >= 3) {
+                deviceList.classList.add('multi-device-3-plus');
+            } else {
+                deviceList.classList.remove('multi-device-3-plus');
+            }
+        } else {
+            deviceList.classList.remove('multi-device');
+            deviceList.classList.remove('multi-device-2-plus');
+            deviceList.classList.remove('multi-device-3-plus');
+        }
+
+        // Add each device
+        connectedDevices.forEach((device) => {
+            const deviceElement = document.createElement('div');
+            deviceElement.className = 'device-container';
+            deviceElement.innerHTML = `
+                <a href="swell-device-detail.html?deviceId=${encodeURIComponent(device.id)}" class="device-link">
+                    <div class="device-card" data-id="${device.id}">
                         <div class="device-icon">
-                            <img src="media/icons/ActiveDevice.png" alt="Lamp" class="device-img">
+                            <img src="media/icons/ActiveDevice.png" alt="Device" class="device-img">
                         </div>
                         <div class="device-info">
-                            <div class="device-name">${savedDeviceName || savedDevice}</div>
+                            <div class="device-name">${device.name}</div>
                             <div class="device-status">Checking connection status...</div>
                         </div>
                     </div>
                 </a>
-                <button class="remove-device-btn" data-id="${savedDevice}">✕</button>
-            </div>
-        `;
+                <button class="remove-device-btn" data-id="${device.id}">✕</button>
+            `;
 
-        // Add event listener to remove button
-        const removeBtn = deviceList.querySelector('.remove-device-btn');
-        if (removeBtn) {
-            removeBtn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                removeDevice(savedDevice);
-            });
+            deviceList.appendChild(deviceElement);
+
+            // Add removal handler
+            const removeBtn = deviceElement.querySelector('.remove-device-btn');
+            if (removeBtn) {
+                removeBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    removeDevice(device.id);
+                });
+            }
+
+            // Check status immediately
+            checkDeviceStatus(device.id, device.name);
+        });
+
+        // Let CSS handle the styling through the multi-device classes
+        const addButton = document.getElementById('add-device-btn');
+        if (addButton) {
+            addButton.style.width = '';
+            addButton.style.marginLeft = '';
         }
-
-        // Check device status immediately
-        checkDeviceStatus(savedDevice, savedDeviceName);
     }
 
     // Function to check device connection status
     function checkDeviceStatus(deviceId, deviceName) {
         const deviceCard = document.querySelector(`.device-card[data-id="${deviceId}"]`);
         const deviceStatusText = deviceCard ? deviceCard.querySelector('.device-status') : null;
+        const deviceImage = deviceCard ? deviceCard.querySelector('.device-img') : null;
 
         if (!deviceCard || !deviceStatusText) return;
 
@@ -590,11 +693,21 @@ function initializeHomePage() {
                     deviceStatusText.textContent = "Connected via HTTP";
                     deviceCard.classList.add('connected');
                     deviceCard.classList.remove('disconnected');
+
+                    // Update device image to active
+                    if (deviceImage) {
+                        deviceImage.src = "media/icons/ActiveDevice.png";
+                    }
                 } else {
                     // Device exists but not currently connected
-                    deviceStatusText.textContent = "Device offline";
+                    deviceStatusText.textContent = "Device disconnected";
                     deviceCard.classList.remove('connected');
                     deviceCard.classList.add('disconnected');
+
+                    // Update device image to inactive
+                    if (deviceImage) {
+                        deviceImage.src = "media/icons/NotActiveDevice.png";
+                    }
                 }
             })
             .catch(error => {
@@ -602,23 +715,27 @@ function initializeHomePage() {
                 deviceStatusText.textContent = "Connection error";
                 deviceCard.classList.remove('connected');
                 deviceCard.classList.add('disconnected');
+
+                // Update device image to inactive on error
+                if (deviceImage) {
+                    deviceImage.src = "media/icons/NotActiveDevice.png";
+                }
             });
     }
 
-    // Set up periodic status checking for saved device (every 10 seconds)
-    let statusCheckInterval;
+    // Initial refresh of device list
+    refreshDeviceList();
 
-    if (savedDevice) {
-        statusCheckInterval = setInterval(() => {
-            checkDeviceStatus(savedDevice, savedDeviceName);
-        }, 10000);
-    }
+    // Set up periodic status checking for all devices (every 10 seconds)
+    const statusCheckInterval = setInterval(() => {
+        connectedDevices.forEach(device => {
+            checkDeviceStatus(device.id, device.name);
+        });
+    }, 10000);
 
     // Clean up interval when leaving the page
     window.addEventListener('beforeunload', () => {
-        if (statusCheckInterval) {
-            clearInterval(statusCheckInterval);
-        }
+        clearInterval(statusCheckInterval);
     });
 }
 

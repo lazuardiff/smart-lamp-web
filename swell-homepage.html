@@ -3,7 +3,8 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Swell - Sleep Well Live Well</title>
     <link rel="stylesheet" href="css/swell-styles.css">
 </head>
@@ -18,15 +19,15 @@
             <div class="tagline">Sleep Well Live Well</div>
         </div>
 
-        <h2 class="section-title">My Device</h2>
+        <h2 class="section-title">My Devices</h2>
 
-        <!-- Device list container (initially empty) -->
-        <div id="device-list">
+        <!-- Device list container with wrapper for proper width control -->
+        <div id="device-list" class="device-list">
             <div class="no-devices">No devices connected</div>
         </div>
 
         <!-- Add Device button opens the connection modal -->
-        <div class="add-button" id="add-device-btn">+ Add Device</div>
+        <div class="add-button" id="add-device-btn">Add Device</div>
 
         <!-- Connection modal (initially hidden) -->
         <div class="connection-modal" id="connection-modal">
@@ -48,7 +49,6 @@
             </div>
         </div>
 
-        <div class="moon"></div>
         <div class="clouds"></div>
     </div>
 

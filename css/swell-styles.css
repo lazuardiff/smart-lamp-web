@@ -6,11 +6,9 @@
 }
 
 body {
-    background-image: url('../media/backgrounds/Background.png');
-    background-size: cover;
-    background-position: center;
-    background-attachment: fixed;
-    background-repeat: no-repeat;
+    background-color: #2d2a3c;
+    /* Remove or comment out the background-image property */
+    /* background-image: url('../media/backgrounds/Background.png'); */
     color: white;
     position: relative;
     height: 100vh;
@@ -22,12 +20,14 @@ body {
 .container {
     width: 100%;
     max-width: 100%;
-    margin: 0;
+    margin: 0 auto;
     padding: 20px;
     position: relative;
     height: 100vh;
     overflow-y: auto;
     overflow-x: hidden;
+    /* Add max-width for large screens to improve readability */
+    max-width: 1200px;
 }
 
 .stars {
@@ -159,6 +159,7 @@ body {
     position: relative;
     z-index: 1;
     transition: transform 0.2s, box-shadow 0.2s;
+    width: 100%;
 }
 
 .add-button:hover {
@@ -166,6 +167,8 @@ body {
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
 }
 
+/* Remove moon styles as we're no longer using it */
+/*
 .moon {
     width: 40px;
     height: 40px;
@@ -179,6 +182,7 @@ body {
     position: relative;
     z-index: 1;
 }
+*/
 
 .clouds {
     position: absolute;
@@ -471,6 +475,8 @@ select:disabled {
     text-align: center;
     color: rgba(255, 255, 255, 0.7);
     margin-bottom: 15px;
+    /* Ensure full width regardless of device size */
+    width: 100%;
 }
 
 .no-devices-found,
@@ -582,8 +588,9 @@ select:disabled {
 
 /* Device removal styles */
 .device-container {
-    position: relative;
+    width: 100%;
     margin-bottom: 15px;
+    position: relative;
 }
 
 .remove-device-btn {
@@ -648,6 +655,12 @@ select:disabled {
     background-color: #3cc153;
 }
 
+/* Device list container - make it full width */
+.device-list {
+    width: 100%;
+    display: block;
+}
+
 /* Add media query for mobile specific styles */
 @media screen and (max-width: 480px) {
     .container {
@@ -666,4 +679,247 @@ select:disabled {
         max-height: 400px;
         /* Provide more space on mobile */
     }
+}
+
+/* Responsive Design Enhancements */
+
+/* Small screens and mobile devices */
+@media screen and (max-width: 600px) {
+    .container {
+        padding: 15px;
+    }
+
+    .logo {
+        font-size: 32px;
+    }
+
+    .tagline {
+        font-size: 14px;
+    }
+
+    .feature-card {
+        padding: 12px;
+        flex-wrap: wrap;
+    }
+
+    .feature-left {
+        margin-bottom: 8px;
+        width: 100%;
+    }
+
+    .toggle {
+        margin-left: auto;
+    }
+
+    .expanded-controls.expanded {
+        max-height: 450px;
+        /* Extra space for touch controls */
+        padding: 15px 10px;
+    }
+
+    .time-input {
+        padding: 10px;
+        /* Larger touch target */
+    }
+
+    .song-dropdown {
+        padding: 10px;
+        /* Larger touch target */
+    }
+
+    .device-name {
+        font-size: 16px;
+    }
+
+    .moon {
+        margin: 30px auto;
+    }
+
+    /* Make modal larger on small screens */
+    .modal-content {
+        width: 95%;
+        max-width: none;
+    }
+
+    /* Improve touch targets */
+    .remove-device-btn {
+        width: 30px;
+        height: 30px;
+        font-size: 16px;
+    }
+
+    .back-button {
+        font-size: 28px;
+        width: 40px;
+        height: 40px;
+    }
+}
+
+/* Medium-sized screens (tablets) */
+@media screen and (min-width: 601px) and (max-width: 900px) {
+    .container {
+        padding: 20px;
+        max-width: 90%;
+    }
+
+    /* Apply tablet-specific styles */
+    .feature-card {
+        padding: 15px;
+    }
+
+    .logo {
+        font-size: 38px;
+    }
+
+    .modal-content {
+        max-width: 450px;
+    }
+
+    /* Two-column layout for tablet, but ONLY when we have at least 2 devices */
+    .device-list.multi-device-2-plus {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+
+    /* When we have at least 2 devices */
+    .device-list.multi-device-2-plus .device-container {
+        width: calc(50% - 7.5px);
+    }
+
+    /* Add button in multi-device mode with at least 2 devices */
+    .multi-device-2-plus~.add-button {
+        width: calc(50% - 7.5px);
+        margin-left: auto;
+        height: 100px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* With only 1 device, keep full width */
+    .device-list:not(.multi-device-2-plus) .device-container,
+    .device-list:not(.multi-device-2-plus)~.add-button {
+        width: 100%;
+    }
+}
+
+/* Large screens (desktops and beyond) */
+@media screen and (min-width: 901px) {
+    .container {
+        padding: 30px;
+    }
+
+    /* Apply desktop enhancements */
+    .feature-section {
+        max-width: 800px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    /* Three-column layout for desktop, but ONLY when we have at least 3 devices */
+    .device-list.multi-device-3-plus {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
+    }
+
+    /* When we have at least 3 devices */
+    .device-list.multi-device-3-plus .device-container {
+        width: calc(33.33% - 13.33px);
+    }
+
+    /* Add button with at least 3 devices */
+    .multi-device-3-plus~.add-button {
+        width: calc(33.33% - 13.33px);
+        height: 120px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    /* With only 1-2 devices, keep full width */
+    .device-list:not(.multi-device-3-plus) .device-container,
+    .device-list:not(.multi-device-3-plus)~.add-button {
+        width: 100%;
+    }
+
+    /* Ensure the "No devices" message spans full width */
+    .device-list .no-devices {
+        width: 100%;
+    }
+
+    /* Hover effects only on devices that support hover */
+    @media (hover: hover) {
+        .device-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+        }
+
+        .add-button:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+        }
+    }
+}
+
+/* Fix for iPhone notch */
+@supports (padding-top: env(safe-area-inset-top)) {
+    .container {
+        padding-left: max(20px, env(safe-area-inset-left));
+        padding-right: max(20px, env(safe-area-inset-right));
+        padding-top: max(20px, env(safe-area-inset-top));
+        padding-bottom: max(20px, env(safe-area-inset-bottom));
+    }
+}
+
+/* Fix for volume slider appearance on different browsers */
+input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    /* Add standard property for compatibility */
+    width: 100%;
+    background: transparent;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    /* Add standard property for compatibility */
+    height: 20px;
+    width: 20px;
+    border-radius: 50%;
+    background: #4cd964;
+    margin-top: -8px;
+    cursor: pointer;
+}
+
+input[type="range"]::-moz-range-thumb {
+    height: 20px;
+    width: 20px;
+    border-radius: 50%;
+    background: #4cd964;
+    cursor: pointer;
+    border: none;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+    width: 100%;
+    height: 4px;
+    background: #ccc;
+    border-radius: 2px;
+}
+
+input[type="range"]::-moz-range-track {
+    width: 100%;
+    height: 4px;
+    background: #ccc;
+    border-radius: 2px;
+}
+
+/* Touch-friendly improvements */
+.toggle {
+    min-width: 48px;
+    /* Minimum touch target size */
+    min-height: 24px;
 }

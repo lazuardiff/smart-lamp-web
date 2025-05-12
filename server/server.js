@@ -11,16 +11,8 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, '..'))); // Serve static files from web directory
 
-// Store device state
-const deviceState = {
-    light: false,
-    aroma: false,
-    music: {
-        active: false,
-        song: 'rainforest',
-        volume: 50
-    }
-};
+// Store device states (key is deviceId)
+const deviceStates = {};
 
 // Store registered ESP32 devices
 const registeredDevices = {};
@@ -66,40 +58,67 @@ app.get('/api/device/:id', (req, res) => {
         console.log(`Last seen: ${new Date(activeDevice.lastSeen).toISOString()}, Connected: ${isConnected}`);
     }
 
+    // Get device-specific state, or create default if none exists
+    if (!deviceStates[deviceId]) {
+        deviceStates[deviceId] = {
+            light: false,
+            aroma: false,
+            music: {
+                active: false,
+                song: 'rainforest',
+                volume: 50
+            }
+        };
+    }
+
     res.json({
         id: deviceId,
         name: activeDevice ? activeDevice.deviceName : deviceId,
         connected: isConnected,
-        state: deviceState,
+        state: deviceStates[deviceId],
         lastSeen: activeDevice ? activeDevice.lastSeen : null
     });
 });
 
 // Update device state
 app.post('/api/device/:id/update', (req, res) => {
+    const deviceId = req.params.id;
     const { feature, value } = req.body;
+
+    // Ensure this device has a state object
+    if (!deviceStates[deviceId]) {
+        deviceStates[deviceId] = {
+            light: false,
+            aroma: false,
+            music: {
+                active: false,
+                song: 'rainforest',
+                volume: 50
+            }
+        };
+    }
+
+    const state = deviceStates[deviceId];
 
     switch (feature) {
         case 'light':
-            deviceState.light = value;
+            state.light = value;
             break;
         case 'aroma':
-            deviceState.aroma = value;
+            state.aroma = value;
             break;
         case 'music':
-            if (value.hasOwnProperty('active')) deviceState.music.active = value.active;
-            if (value.hasOwnProperty('song')) deviceState.music.song = value.song;
-            if (value.hasOwnProperty('volume')) deviceState.music.volume = value.volume;
+            if (value.hasOwnProperty('active')) state.music.active = value.active;
+            if (value.hasOwnProperty('song')) state.music.song = value.song;
+            if (value.hasOwnProperty('volume')) state.music.volume = value.volume;
             break;
     }
 
-    res.json({ success: true, state: deviceState });
+    res.json({ success: true, state });
 });
 
 // Disconnect a device
 app.post('/api/device/:id/disconnect', (req, res) => {
-    // In a real implementation, this would handle any cleanup needed
-    // For now, we'll just acknowledge the disconnect
     console.log(`Device ${req.params.id} disconnected`);
     res.json({ success: true, message: `Device ${req.params.id} disconnected successfully` });
 });
@@ -108,10 +127,8 @@ app.post('/api/device/:id/disconnect', (req, res) => {
 app.post('/api/esp32/register', (req, res) => {
     const { deviceId, deviceName, deviceType, deviceModel, ipAddress } = req.body;
 
-    // Clean up deviceId to handle MAC addresses consistently
     const cleanDeviceId = deviceId.toUpperCase();
 
-    // Store device information
     registeredDevices[cleanDeviceId] = {
         deviceId: cleanDeviceId,
         deviceName,
@@ -121,6 +138,18 @@ app.post('/api/esp32/register', (req, res) => {
         lastSeen: Date.now(),
         isOnline: true
     };
+
+    if (!deviceStates[cleanDeviceId]) {
+        deviceStates[cleanDeviceId] = {
+            light: false,
+            aroma: false,
+            music: {
+                active: false,
+                song: 'rainforest',
+                volume: 50
+            }
+        };
+    }
 
     console.log(`Device registered: ${deviceName} (${cleanDeviceId})`);
     console.log("Current registered devices:", Object.keys(registeredDevices));
@@ -134,9 +163,7 @@ app.get('/api/devices/available', (req, res) => {
         const now = Date.now();
         const availableDevices = [];
 
-        // Add a demo device if no real devices are registered
         if (Object.keys(registeredDevices).length === 0) {
-            // Return a demo device for testing when no real devices are available
             availableDevices.push({
                 id: "demo_device",
                 name: "Demo SWELL Device",
@@ -149,9 +176,7 @@ app.get('/api/devices/available', (req, res) => {
             return res.json(availableDevices);
         }
 
-        // Filter for online devices (seen in the last 60 seconds)
         Object.values(registeredDevices).forEach(device => {
-            // If device was seen in the last minute, consider it online
             if (now - device.lastSeen < 60000) {
                 availableDevices.push({
                     id: device.deviceId,
@@ -161,7 +186,6 @@ app.get('/api/devices/available', (req, res) => {
                     status: 'available'
                 });
             } else {
-                // Mark device as offline
                 device.isOnline = false;
             }
         });
@@ -174,33 +198,60 @@ app.get('/api/devices/available', (req, res) => {
     }
 });
 
+// Get all connected devices
+app.get('/api/devices/connected', (req, res) => {
+    const connectedDevices = [];
+    const now = Date.now();
+
+    Object.values(registeredDevices).forEach(device => {
+        const isConnected = (now - device.lastSeen < 60000) && device.isOnline;
+        if (isConnected) {
+            connectedDevices.push({
+                id: device.deviceId,
+                name: device.deviceName,
+                type: device.deviceType,
+                model: device.deviceModel,
+                status: 'connected'
+            });
+        }
+    });
+
+    res.json(connectedDevices);
+});
+
 // Update last seen timestamp when device pings server
-app.get('/api/esp32/status', (req, res) => {
-    // Get client IP address
+app.get('/api/esp32/status/:id', (req, res) => {
+    const deviceId = req.params.id;
     const clientIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
 
-    console.log("ESP32 status request from IP:", clientIp);
+    console.log(`ESP32 status request from IP ${clientIp} for device ${deviceId}`);
 
-    // Find device with this IP
-    let device = Object.values(registeredDevices).find(d => d.ipAddress === clientIp);
+    let device = registeredDevices[deviceId];
 
     if (device) {
         device.lastSeen = Date.now();
         device.isOnline = true;
-        console.log(`Updated last seen time for device ${device.deviceId}`);
+        device.ipAddress = clientIp;
+
+        console.log(`Updated last seen time for device ${deviceId}`);
+
+        if (!deviceStates[deviceId]) {
+            deviceStates[deviceId] = {
+                light: false,
+                aroma: false,
+                music: {
+                    active: false,
+                    song: 'rainforest',
+                    volume: 50
+                }
+            };
+        }
+
+        res.json(deviceStates[deviceId]);
     } else {
-        console.log("No registered device found with IP:", clientIp);
+        console.log(`Device ${deviceId} not registered but trying to connect`);
+        res.status(404).json({ error: "Device not registered" });
     }
-
-    // Return device state as usual
-    res.json(deviceState);
-});
-
-app.post('/api/esp32/update', (req, res) => {
-    const { status } = req.body;
-
-    // ESP32 can update its current status here
-    res.json({ success: true });
 });
 
 // Connect to a device
@@ -208,9 +259,7 @@ app.post('/api/devices/connect', (req, res) => {
     try {
         const { deviceId } = req.body;
 
-        // Special handling for demo device
         if (deviceId === "demo_device") {
-            // Save device information for the demo device
             registeredDevices[deviceId] = {
                 deviceId: "demo_device",
                 deviceName: "Demo SWELL Device",
@@ -220,6 +269,18 @@ app.post('/api/devices/connect', (req, res) => {
                 lastSeen: Date.now(),
                 isOnline: true
             };
+
+            if (!deviceStates[deviceId]) {
+                deviceStates[deviceId] = {
+                    light: false,
+                    aroma: false,
+                    music: {
+                        active: false,
+                        song: 'rainforest',
+                        volume: 50
+                    }
+                };
+            }
 
             console.log("Connected to demo device");
             return res.json({
@@ -251,16 +312,27 @@ app.post('/api/devices/connect', (req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-    // Store the demo device in localStorage when server starts
-    registeredDevices["demo_device"] = {
-        deviceId: "demo_device",
-        deviceName: "Demo SWELL Device",
-        deviceType: "smart_lamp",
-        deviceModel: "ESP32",
-        ipAddress: "127.0.0.1",
-        lastSeen: Date.now(),
-        isOnline: true
-    };
+    ["demo_device_1", "demo_device_2"].forEach((id, index) => {
+        registeredDevices[id] = {
+            deviceId: id,
+            deviceName: `Demo SWELL Device ${index + 1}`,
+            deviceType: "smart_lamp",
+            deviceModel: "ESP32",
+            ipAddress: "127.0.0.1",
+            lastSeen: Date.now(),
+            isOnline: true
+        };
+
+        deviceStates[id] = {
+            light: false,
+            aroma: false,
+            music: {
+                active: false,
+                song: 'rainforest',
+                volume: 50
+            }
+        };
+    });
 
     console.log(`Server is running on port ${PORT}`);
     console.log(`Open http://localhost:${PORT} in your browser to view the app.`);

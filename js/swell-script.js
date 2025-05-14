@@ -314,6 +314,8 @@ function initializeDeviceDetailPage() {
                     handleLightToggle(toggle);
                 } else if (toggle.id === 'aroma-toggle') {
                     handleAromaToggle(toggle);
+                } else if (toggle.id === 'alarm-toggle') {
+                    handleAlarmToggle(toggle);
                 } else if (toggle.id === 'music-toggle' || toggle.id === 'sound-toggle') {
                     handleMusicToggle(toggle);
                 }
@@ -348,6 +350,11 @@ function initializeDeviceDetailPage() {
                     timerConfirmButton.textContent = 'Konfirmasi Timer';
                 }
 
+                // When timer is turned off, remove the confirmed class from the timer card
+                if (timerCard) {
+                    timerCard.classList.remove('timer-confirmed');
+                }
+
                 // When timer is turned off, disable dependent features
                 disableFeatureToggles();
             }
@@ -376,25 +383,30 @@ function initializeDeviceDetailPage() {
     function enableFeatureToggles() {
         const featureCards = document.querySelectorAll('.feature-card:not(#timer-card)');
         featureCards.forEach(card => {
+            // Remove the feature-dependent class which controls the shadow overlay
             card.classList.remove('feature-dependent');
+
             const toggle = card.querySelector('.toggle');
             if (toggle) {
                 toggle.classList.remove('dependent-disabled');
                 toggle.style.pointerEvents = 'auto';
 
-                // Remove any dependency notices
-                const existingNotice = card.querySelector('.dependency-notice');
-                if (existingNotice) {
-                    existingNotice.remove();
-                }
+                // The dependency notice will be automatically hidden via CSS
+                // when the feature-dependent class is removed
             }
         });
+
+        // Save to localStorage in demo mode
+        if (FRONTEND_DEMO_MODE) {
+            localStorage.setItem('timerConfirmed', 'true');
+        }
     }
 
     // Function to disable all feature toggles when timer is not confirmed
     function disableFeatureToggles() {
         const featureCards = document.querySelectorAll('.feature-card:not(#timer-card)');
         featureCards.forEach(card => {
+            // Add feature-dependent class to activate the shadow overlay
             card.classList.add('feature-dependent');
 
             // Turn off any active toggles
@@ -410,9 +422,10 @@ function initializeDeviceDetailPage() {
                     statusElement.textContent = 'OFF';
                 }
 
-                // Add notice about timer dependency if not already present
-                if (!card.querySelector('.dependency-notice')) {
-                    const notice = document.createElement('div');
+                // Make sure the dependency notice exists
+                let notice = card.querySelector('.dependency-notice');
+                if (!notice) {
+                    notice = document.createElement('div');
                     notice.className = 'dependency-notice';
                     notice.textContent = 'Enable timer first';
                     card.appendChild(notice);
@@ -428,9 +441,9 @@ function initializeDeviceDetailPage() {
             }
         });
 
-        // Save state
+        // Save state in demo mode
         if (FRONTEND_DEMO_MODE) {
-            localStorage.setItem('timerConfirmed', false);
+            localStorage.setItem('timerConfirmed', 'false');
         }
     }
 
@@ -487,6 +500,15 @@ function initializeDeviceDetailPage() {
         }
     }
 
+    // Function to handle alarm toggle
+    function handleAlarmToggle(toggle) {
+        const isActive = toggle.classList.contains('active');
+        const statusText = document.getElementById('alarm-status');
+        if (statusText) {
+            statusText.textContent = isActive ? 'ON' : 'OFF';
+        }
+    }
+
     // Function to handle music/sound toggle
     function handleMusicToggle(toggle) {
         const isActive = toggle.classList.contains('active');
@@ -519,6 +541,7 @@ function initializeDeviceDetailPage() {
     if (timerConfirmButton) {
         timerConfirmButton.addEventListener('click', function () {
             const timerToggle = document.getElementById('timer-toggle');
+            const timerCard = document.getElementById('timer-card');
 
             if (timerToggle && timerToggle.classList.contains('active')) {
                 // Update visual state
@@ -526,6 +549,11 @@ function initializeDeviceDetailPage() {
                 this.textContent = 'Timer Terkonfirmasi';
                 this.disabled = true;
                 this.style.backgroundColor = "#4cd964";
+
+                // Change timer card left border to green
+                if (timerCard) {
+                    timerCard.classList.add('timer-confirmed');
+                }
 
                 // Enable other features
                 enableFeatureToggles();
@@ -588,6 +616,11 @@ function initializeDeviceDetailPage() {
                 timerConfirmButton.textContent = 'Timer Terkonfirmasi';
                 timerConfirmButton.disabled = true;
                 timerConfirmButton.style.backgroundColor = "#4cd964";
+
+                // Add the green border class if timer was confirmed
+                if (timerCard) {
+                    timerCard.classList.add('timer-confirmed');
+                }
 
                 // Enable other features
                 enableFeatureToggles();
@@ -661,7 +694,7 @@ function initializeDeviceDetailPage() {
             });
         }
 
-        // Set up light intensity slider if it exists
+        // Set up light intensity slider
         const intensitySlider = document.getElementById('intensity-slider');
         const intensityValue = document.querySelector('.intensity-value');
 
@@ -684,6 +717,16 @@ function initializeDeviceDetailPage() {
             window.location.href = 'swell-homepage.html';
         });
     }
+
+    // Initialize the UI based on timer status
+    setTimeout(function () {
+        // If timer is not confirmed, make sure features are disabled with shadow effect
+        if (!isTimerConfirmed()) {
+            disableFeatureToggles();
+        } else {
+            enableFeatureToggles();
+        }
+    }, 200);
 }
 
 // Homepage specific functions

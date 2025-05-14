@@ -24,6 +24,9 @@ function createStars() {
 
 // Device detail page specific functions
 function initializeDeviceDetailPage() {
+    // Override all device connectivity check functions for frontend demo
+    const FRONTEND_DEMO_MODE = true;
+
     // Get the device ID from the URL or fallback to localStorage
     const urlParams = new URLSearchParams(window.location.search);
     const deviceId = urlParams.get('deviceId') || localStorage.getItem('connectedDevice');
@@ -43,16 +46,41 @@ function initializeDeviceDetailPage() {
     const deviceNameElement = document.querySelector('.device-card .device-name');
     const deviceStatusElement = document.querySelector('.device-card .device-status');
 
-    console.log("Device detail page - Checking device:", deviceId, deviceName);
-
     // Update device name based on connected device
     if (deviceId && deviceNameElement) {
         // Use the name if available, otherwise use the ID
         deviceNameElement.textContent = deviceName || deviceId;
     }
 
-    // Function to check device connection status
+    // FRONTEND DEMO MODE: Modified checkDeviceStatus to skip API calls
     function checkDeviceStatus() {
+        if (FRONTEND_DEMO_MODE) {
+            console.log("Frontend Demo Mode: Simulating connected device");
+
+            // Show device as connected
+            if (deviceNameElement) deviceNameElement.textContent = deviceName || deviceId || "Demo Smart Lamp";
+            if (deviceStatusElement) deviceStatusElement.textContent = "Connected (Demo Mode)";
+
+            // Set active device image
+            const deviceImage = document.querySelector('.device-card .device-img');
+            if (deviceImage) {
+                deviceImage.src = "media/icons/ActiveDevice.png";
+            }
+
+            // Add connected class
+            const deviceCard = document.querySelector('.device-card');
+            if (deviceCard) {
+                deviceCard.classList.add('connected');
+                deviceCard.classList.remove('disconnected');
+            }
+
+            // Enable all controls
+            enableControls();
+
+            return;
+        }
+
+        // Original API call code (will not run in demo mode)
         if (!deviceId) {
             // No device saved, show as disconnected
             if (deviceNameElement) deviceNameElement.textContent = "No Device Connected";
@@ -230,156 +258,422 @@ function initializeDeviceDetailPage() {
         }
     }
 
+    // FRONTEND DEMO MODE: Override API call for toggle updates
+    const originalFetch = window.fetch;
+    if (FRONTEND_DEMO_MODE) {
+        window.fetch = function (url, options) {
+            // Simulate successful API call
+            console.log("Frontend Demo Mode: Simulating API call to", url);
+            return Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({
+                    success: true,
+                    connected: true,
+                    state: {
+                        light: document.getElementById('light-toggle')?.classList.contains('active') || false,
+                        aroma: document.getElementById('aroma-toggle')?.classList.contains('active') || false,
+                        music: {
+                            active: document.getElementById('music-toggle')?.classList.contains('active') || false,
+                            song: document.getElementById('song-select')?.value || "rainforest",
+                            volume: parseInt(document.getElementById('volume-slider')?.value || "50")
+                        }
+                    }
+                })
+            });
+        };
+    }
+
     // Check status immediately on page load
     checkDeviceStatus();
 
-    // Set up periodic status check (every 5 seconds)
-    const statusCheckInterval = setInterval(checkDeviceStatus, 5000);
-
-    // Toggle switch functionality
+    // Set up toggle switch functionality for all feature toggles
     const toggles = document.querySelectorAll('.toggle');
-    const lightStatusText = document.getElementById('light-status');
-    const aromaStatusText = document.getElementById('aroma-status');
-    const musicStatusText = document.getElementById('music-status');
-    const musicControls = document.getElementById('music-controls');
-    const musicCard = document.getElementById('music-card');
-    const musicToggle = document.getElementById('music-toggle');
-    const volumeSlider = document.getElementById('volume-slider');
-    const volumeValue = document.querySelector('.volume-value');
-
     if (toggles.length) {
         toggles.forEach(toggle => {
+            toggle.classList.remove('disabled'); // Enable all toggles in demo mode
+
             toggle.addEventListener('click', (e) => {
+                // If this is a dependent toggle and timer is not confirmed, don't allow toggle
+                if (toggle.classList.contains('dependent-disabled') &&
+                    !isTimerConfirmed()) {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    // Show temporary notification
+                    showTemporaryMessage('Please enable and confirm timer first');
+                    return;
+                }
+
                 e.stopPropagation(); // Prevent card click when toggle is clicked
                 toggle.classList.toggle('active');
 
-                // Determine which feature was toggled and its new state
-                let feature = '';
-                let value = false;
-
-                if (toggle.id === 'light-toggle') {
-                    feature = 'light';
-                    value = toggle.classList.contains('active');
-                    if (value) {
-                        lightStatusText.textContent = 'ON';
-                    } else {
-                        lightStatusText.textContent = 'OFF';
-                    }
+                // Determine which feature was toggled and update UI
+                if (toggle.id === 'timer-toggle') {
+                    handleTimerToggle(toggle);
+                } else if (toggle.id === 'light-toggle') {
+                    handleLightToggle(toggle);
                 } else if (toggle.id === 'aroma-toggle') {
-                    feature = 'aroma';
-                    value = toggle.classList.contains('active');
-                    if (value) {
-                        aromaStatusText.textContent = 'ON';
-                    } else {
-                        aromaStatusText.textContent = 'OFF';
-                    }
-                } else if (toggle.id === 'music-toggle') {
-                    feature = 'music';
-                    value = { active: toggle.classList.contains('active') };
-                    if (value.active) {
-                        musicStatusText.textContent = 'ON';
-                        musicControls.classList.add('expanded');
-                        musicCard.classList.add('expanded');
-                    } else {
-                        musicStatusText.textContent = 'OFF';
-                        musicControls.classList.remove('expanded');
-                        musicCard.classList.remove('expanded');
-                    }
-                }
-
-                // Send update to server if we have a device connected
-                if (deviceId && feature) {
-                    fetch(`/api/device/${deviceId}/update`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ feature, value })
-                    })
-                        .then(response => response.json())
-                        .catch(error => console.error('Error updating device:', error));
+                    handleAromaToggle(toggle);
+                } else if (toggle.id === 'music-toggle' || toggle.id === 'sound-toggle') {
+                    handleMusicToggle(toggle);
                 }
             });
         });
     }
 
-    // Clean up interval when leaving the page
-    window.addEventListener('beforeunload', () => {
-        clearInterval(statusCheckInterval);
-    });
+    // Function to handle timer toggle
+    function handleTimerToggle(toggle) {
+        const timerStatusText = document.getElementById('timer-status');
+        const timerControls = document.getElementById('timer-controls');
+        const timerCard = document.getElementById('timer-card');
+        const isActive = toggle.classList.contains('active');
+        const timerConfirmButton = document.getElementById('timer-confirm-button');
 
-    // Expand/collapse music controls only when the toggle is ON
-    if (musicCard) {
+        // Update UI
+        if (timerStatusText) {
+            timerStatusText.textContent = isActive ? 'ON' : 'OFF';
+        }
+
+        if (timerControls && timerCard) {
+            if (isActive) {
+                timerControls.classList.add('expanded');
+                timerCard.classList.add('expanded');
+                if (timerConfirmButton) timerConfirmButton.disabled = false;
+            } else {
+                timerControls.classList.remove('expanded');
+                timerCard.classList.remove('expanded');
+                if (timerConfirmButton) {
+                    timerConfirmButton.disabled = true;
+                    timerConfirmButton.classList.remove('confirmed');
+                    timerConfirmButton.textContent = 'Konfirmasi Timer';
+                }
+
+                // When timer is turned off, disable dependent features
+                disableFeatureToggles();
+            }
+        }
+
+        // Save timer state
+        if (FRONTEND_DEMO_MODE) {
+            localStorage.setItem('timerActive', isActive);
+            localStorage.setItem('timerConfirmed', false);
+        }
+    }
+
+    // Function to check if timer is confirmed
+    function isTimerConfirmed() {
+        // In frontend demo mode, check localStorage
+        if (FRONTEND_DEMO_MODE) {
+            return localStorage.getItem('timerConfirmed') === 'true';
+        }
+
+        // Check confirm button state
+        const timerConfirmButton = document.getElementById('timer-confirm-button');
+        return timerConfirmButton && timerConfirmButton.classList.contains('confirmed');
+    }
+
+    // Function to enable all feature toggles when timer is confirmed
+    function enableFeatureToggles() {
+        const featureCards = document.querySelectorAll('.feature-card:not(#timer-card)');
+        featureCards.forEach(card => {
+            card.classList.remove('feature-dependent');
+            const toggle = card.querySelector('.toggle');
+            if (toggle) {
+                toggle.classList.remove('dependent-disabled');
+                toggle.style.pointerEvents = 'auto';
+
+                // Remove any dependency notices
+                const existingNotice = card.querySelector('.dependency-notice');
+                if (existingNotice) {
+                    existingNotice.remove();
+                }
+            }
+        });
+    }
+
+    // Function to disable all feature toggles when timer is not confirmed
+    function disableFeatureToggles() {
+        const featureCards = document.querySelectorAll('.feature-card:not(#timer-card)');
+        featureCards.forEach(card => {
+            card.classList.add('feature-dependent');
+
+            // Turn off any active toggles
+            const toggle = card.querySelector('.toggle');
+            if (toggle) {
+                toggle.classList.remove('active');
+                toggle.classList.add('dependent-disabled');
+
+                // Update status text
+                const featureId = toggle.id.split('-')[0];
+                const statusElement = document.getElementById(`${featureId}-status`);
+                if (statusElement) {
+                    statusElement.textContent = 'OFF';
+                }
+
+                // Add notice about timer dependency if not already present
+                if (!card.querySelector('.dependency-notice')) {
+                    const notice = document.createElement('div');
+                    notice.className = 'dependency-notice';
+                    notice.textContent = 'Enable timer first';
+                    card.appendChild(notice);
+                }
+
+                // Collapse any expanded controls
+                const controlsId = `${featureId}-controls`;
+                const controls = document.getElementById(controlsId);
+                if (controls) {
+                    controls.classList.remove('expanded');
+                    card.classList.remove('expanded');
+                }
+            }
+        });
+
+        // Save state
+        if (FRONTEND_DEMO_MODE) {
+            localStorage.setItem('timerConfirmed', false);
+        }
+    }
+
+    // Show temporary message
+    function showTemporaryMessage(message) {
+        const existingMessage = document.querySelector('.temp-message');
+        if (existingMessage) {
+            existingMessage.remove();
+        }
+
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'temp-message';
+        messageDiv.style.cssText = 'position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); ' +
+            'background-color: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 5px; ' +
+            'z-index: 9999; transition: opacity 0.5s ease;';
+        messageDiv.textContent = message;
+
+        document.body.appendChild(messageDiv);
+
+        setTimeout(() => {
+            messageDiv.style.opacity = '0';
+            setTimeout(() => messageDiv.remove(), 500);
+        }, 3000);
+    }
+
+    // Function to handle light toggle
+    function handleLightToggle(toggle) {
+        const isActive = toggle.classList.contains('active');
+        const statusText = document.getElementById('light-status');
+        if (statusText) {
+            statusText.textContent = isActive ? 'ON' : 'OFF';
+        }
+
+        // Show/hide controls if collapsible
+        const controls = document.getElementById('light-controls');
+        const card = document.getElementById('light-card');
+        if (controls && card) {
+            if (isActive) {
+                controls.classList.add('expanded');
+                card.classList.add('expanded');
+            } else {
+                controls.classList.remove('expanded');
+                card.classList.remove('expanded');
+            }
+        }
+    }
+
+    // Function to handle aroma toggle
+    function handleAromaToggle(toggle) {
+        const isActive = toggle.classList.contains('active');
+        const statusText = document.getElementById('aroma-status');
+        if (statusText) {
+            statusText.textContent = isActive ? 'ON' : 'OFF';
+        }
+    }
+
+    // Function to handle music/sound toggle
+    function handleMusicToggle(toggle) {
+        const isActive = toggle.classList.contains('active');
+        const statusText = toggle.id === 'music-toggle' ?
+            document.getElementById('music-status') : document.getElementById('sound-status');
+
+        if (statusText) {
+            statusText.textContent = isActive ? 'ON' : 'OFF';
+        }
+
+        // Show/hide controls
+        const controls = toggle.id === 'music-toggle' ?
+            document.getElementById('music-controls') : document.getElementById('sound-controls');
+        const card = toggle.id === 'music-toggle' ?
+            document.getElementById('music-card') : document.getElementById('sound-card');
+
+        if (controls && card) {
+            if (isActive) {
+                controls.classList.add('expanded');
+                card.classList.add('expanded');
+            } else {
+                controls.classList.remove('expanded');
+                card.classList.remove('expanded');
+            }
+        }
+    }
+
+    // Initialize timer confirmation button
+    const timerConfirmButton = document.getElementById('timer-confirm-button');
+    if (timerConfirmButton) {
+        timerConfirmButton.addEventListener('click', function () {
+            const timerToggle = document.getElementById('timer-toggle');
+
+            if (timerToggle && timerToggle.classList.contains('active')) {
+                // Update visual state
+                this.classList.add('confirmed');
+                this.textContent = 'Timer Terkonfirmasi';
+                this.disabled = true;
+                this.style.backgroundColor = "#4cd964";
+
+                // Enable other features
+                enableFeatureToggles();
+
+                // Show confirmation message
+                const timerConfirmation = document.getElementById('timer-confirmation');
+                if (timerConfirmation) {
+                    const message = timerConfirmation.querySelector('.confirmation-message');
+                    if (message) {
+                        const startTime = document.getElementById('start-time').value;
+                        const endTime = document.getElementById('end-time').value;
+                        message.textContent = `Timer confirmed: ${startTime} to ${endTime}`;
+                    }
+                    timerConfirmation.classList.add('visible');
+
+                    setTimeout(() => {
+                        if (timerConfirmation.classList.contains('visible')) {
+                            timerConfirmation.classList.remove('visible');
+                        }
+                    }, 5000);
+                }
+
+                // Save state
+                if (FRONTEND_DEMO_MODE) {
+                    localStorage.setItem('timerConfirmed', true);
+                    localStorage.setItem('timerStartTime', document.getElementById('start-time').value);
+                    localStorage.setItem('timerEndTime', document.getElementById('end-time').value);
+                }
+            }
+        });
+    }
+
+    // On page load, check if timer was previously confirmed
+    if (FRONTEND_DEMO_MODE) {
+        const timerActive = localStorage.getItem('timerActive') === 'true';
+        const timerConfirmed = localStorage.getItem('timerConfirmed') === 'true';
+        const timerStartTime = localStorage.getItem('timerStartTime') || '22:00';
+        const timerEndTime = localStorage.getItem('timerEndTime') || '06:00';
+
+        // Set up timer toggle
+        const timerToggle = document.getElementById('timer-toggle');
+        const timerStatusText = document.getElementById('timer-status');
+        const timerConfirmButton = document.getElementById('timer-confirm-button');
+        const timerControls = document.getElementById('timer-controls');
+        const timerCard = document.getElementById('timer-card');
+        const startTimeInput = document.getElementById('start-time');
+        const endTimeInput = document.getElementById('end-time');
+
+        if (timerToggle && timerActive) {
+            timerToggle.classList.add('active');
+            if (timerStatusText) timerStatusText.textContent = 'ON';
+
+            if (timerControls && timerCard) {
+                timerControls.classList.add('expanded');
+                timerCard.classList.add('expanded');
+            }
+
+            if (timerConfirmButton && timerConfirmed) {
+                timerConfirmButton.classList.add('confirmed');
+                timerConfirmButton.textContent = 'Timer Terkonfirmasi';
+                timerConfirmButton.disabled = true;
+                timerConfirmButton.style.backgroundColor = "#4cd964";
+
+                // Enable other features
+                enableFeatureToggles();
+            }
+        }
+
+        // Set time inputs
+        if (startTimeInput) startTimeInput.value = timerStartTime;
+        if (endTimeInput) endTimeInput.value = timerEndTime;
+    }
+
+    // Comment out or modify statusCheckInterval in demo mode
+    if (FRONTEND_DEMO_MODE) {
+        // Don't set up periodic status checks in demo mode
+    } else {
+        // Set up periodic status check (every 5 seconds)
+        const statusCheckInterval = setInterval(checkDeviceStatus, 5000);
+
+        // Clean up interval when leaving the page
+        window.addEventListener('beforeunload', () => {
+            clearInterval(statusCheckInterval);
+        });
+    }
+
+    // Expand/collapse music controls functionality
+    const musicCard = document.getElementById('music-card');
+    const musicControls = document.getElementById('music-controls');
+    const musicToggle = document.getElementById('music-toggle');
+
+    if (musicCard && musicControls && musicToggle) {
         musicCard.addEventListener('click', () => {
             // Only toggle expanded state if music is ON
-            if (musicToggle && musicToggle.classList.contains('active')) {
+            if (musicToggle.classList.contains('active')) {
                 musicControls.classList.toggle('expanded');
                 musicCard.classList.toggle('expanded');
             }
         });
     }
 
-    // Update volume value display when slider is moved
-    if (volumeSlider && volumeValue) {
-        // Create a wrapper div for the slider and value
-        const wrapper = document.createElement('div');
-        wrapper.className = 'volume-control-wrapper';
+    // Same for sound card if it exists
+    const soundCard = document.getElementById('sound-card');
+    const soundControls = document.getElementById('sound-controls');
+    const soundToggle = document.getElementById('sound-toggle');
 
-        // Move elements into the wrapper
-        const parent = volumeSlider.parentNode;
-        parent.insertBefore(wrapper, volumeSlider);
-        wrapper.appendChild(volumeSlider);
-        wrapper.appendChild(volumeValue);
-
-        // Set initial value
-        volumeValue.textContent = `${volumeSlider.value}%`;
-
-        // Update value on slider change
-        volumeSlider.addEventListener('input', () => {
-            volumeValue.textContent = `${volumeSlider.value}%`;
+    if (soundCard && soundControls && soundToggle) {
+        soundCard.addEventListener('click', () => {
+            // Only toggle expanded state if sound is ON
+            if (soundToggle.classList.contains('active')) {
+                soundControls.classList.toggle('expanded');
+                soundCard.classList.toggle('expanded');
+            }
         });
     }
 
-    if (volumeSlider) {
-        // Create volume popup element
-        const volumePopup = document.createElement('div');
-        volumePopup.className = 'volume-popup';
-        volumeSlider.parentNode.appendChild(volumePopup);
+    // Set up volume sliders
+    setupVolumeSliders();
 
-        // Function to position the popup directly above the thumb
-        const positionPopup = () => {
-            const sliderRect = volumeSlider.getBoundingClientRect();
-            const thumbPosition = (volumeSlider.value / volumeSlider.max) * sliderRect.width;
+    // Helper function to set up volume sliders
+    function setupVolumeSliders() {
+        // Set up music volume slider
+        const volumeSlider = document.getElementById('volume-slider');
+        const volumeValue = document.querySelector('.volume-value');
 
-            // Position popup directly above the thumb
-            volumePopup.style.left = `${thumbPosition}px`;
-            volumePopup.textContent = `${volumeSlider.value}%`;
-        };
+        if (volumeSlider && volumeValue) {
+            // Set initial value
+            volumeValue.textContent = `${volumeSlider.value}%`;
 
-        // Update popup when slider is moved
-        volumeSlider.addEventListener('input', () => {
-            positionPopup();
-            volumePopup.style.opacity = '1';
-        });
+            // Update value on slider change
+            volumeSlider.addEventListener('input', () => {
+                volumeValue.textContent = `${volumeSlider.value}%`;
+            });
+        }
 
-        // Hide popup when done sliding
-        volumeSlider.addEventListener('mouseup', () => {
-            setTimeout(() => {
-                volumePopup.style.opacity = '0';
-            }, 1000);
-        });
+        // Set up light intensity slider if it exists
+        const intensitySlider = document.getElementById('intensity-slider');
+        const intensityValue = document.querySelector('.intensity-value');
 
-        volumeSlider.addEventListener('mouseleave', () => {
-            setTimeout(() => {
-                volumePopup.style.opacity = '0';
-            }, 1000);
-        });
+        if (intensitySlider && intensityValue) {
+            // Set initial value
+            intensityValue.textContent = `${intensitySlider.value}%`;
 
-        // Show popup on hover
-        volumeSlider.addEventListener('mouseenter', () => {
-            positionPopup();
-            volumePopup.style.opacity = '1';
-        });
+            // Update value on slider change
+            intensitySlider.addEventListener('input', () => {
+                intensityValue.textContent = `${intensitySlider.value}%`;
+            });
+        }
     }
 
     // Add back button event handler
@@ -403,6 +697,23 @@ function initializeHomePage() {
     // Track connected devices in an array
     let connectedDevices = JSON.parse(localStorage.getItem('connectedDevices') || '[]');
 
+    // TEMPORARY: Add mock device if none exist for UI demonstration
+    if (connectedDevices.length === 0) {
+        connectedDevices = [
+            {
+                id: "demo-device-1",
+                name: "Swell Smart Lamp 1"
+            },
+            {
+                id: "demo-device-2",
+                name: "Swell Smart Lamp 2"
+            }
+        ];
+        localStorage.setItem('connectedDevices', JSON.stringify(connectedDevices));
+        localStorage.setItem('connectedDevice', connectedDevices[0].id);
+        localStorage.setItem('connectedDeviceName', connectedDevices[0].name);
+    }
+
     // Function to save connected devices to localStorage
     function saveConnectedDevices() {
         localStorage.setItem('connectedDevices', JSON.stringify(connectedDevices));
@@ -424,66 +735,73 @@ function initializeHomePage() {
         });
     }
 
-    // Function to scan for available ESP32 devices
+    // Function to scan for available ESP32 devices - TEMPORARILY MOCKED
     function scanForDevices() {
         // Clear previous results
         discoveredDevices.innerHTML = '';
 
-        // Show scanning animation
+        // Show scanning animation briefly
         discoveredDevices.innerHTML = `
             <div class="scanning-message">
                 <p>Looking for Swell devices on your network...</p>
             </div>
         `;
 
-        // Fetch available devices from server
+        // TEMPORARY: Use mock devices instead of real API call
+        setTimeout(() => {
+            // Clear the scanning message
+            discoveredDevices.innerHTML = '';
+
+            // Mock devices for UI demo
+            const mockDevices = [
+                { id: "demo-device-3", name: "Swell Smart Lamp 3", model: "SWELL-001", status: "Available" },
+                { id: "demo-device-4", name: "Swell Smart Lamp 4", model: "SWELL-002", status: "Available" }
+            ];
+
+            if (mockDevices.length === 0) {
+                discoveredDevices.innerHTML = `
+                    <div class="no-devices-found">
+                        <p>No Swell devices found on your network.</p>
+                        <p>Make sure your device is powered on and connected to WiFi.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Display mock devices
+            mockDevices.forEach(device => {
+                const deviceElement = document.createElement('div');
+                deviceElement.className = 'discovered-device';
+                deviceElement.dataset.id = device.id;
+
+                deviceElement.innerHTML = `
+                    <img src="media/icons/ActiveDevice.png" alt="Device" class="device-icon-small">
+                    <div class="device-info">
+                        <div class="device-name">${device.name}</div>
+                        <div class="device-type">${device.model}</div>
+                        <div class="device-status">${device.status}</div>
+                    </div>
+                `;
+
+                // Add click event to connect to device
+                deviceElement.addEventListener('click', () => {
+                    connectToDevice(device.id, device.name);
+                });
+
+                discoveredDevices.appendChild(deviceElement);
+            });
+        }, 2000); // Simulate network delay
+
+        /* COMMENTED OUT: Real API call
         fetch('/api/devices/available')
             .then(response => {
-                // Check if response is ok before continuing
                 if (!response.ok) {
                     throw new Error(`HTTP error! Status: ${response.status}`);
                 }
                 return response.json();
             })
             .then(devices => {
-                // Clear the scanning message
-                discoveredDevices.innerHTML = '';
-
-                console.log("Found devices:", devices); // Debug logging
-
-                if (!devices || devices.length === 0) {
-                    // No devices found
-                    discoveredDevices.innerHTML = `
-                        <div class="no-devices-found">
-                            <p>No Swell devices found on your network.</p>
-                            <p>Make sure your device is powered on and connected to WiFi.</p>
-                        </div>
-                    `;
-                    return;
-                }
-
-                // Display found devices
-                devices.forEach(device => {
-                    const deviceElement = document.createElement('div');
-                    deviceElement.className = 'discovered-device';
-                    deviceElement.dataset.id = device.id;
-
-                    deviceElement.innerHTML = `
-                        <img src="media/icons/ActiveDevice.png" alt="Device" class="device-icon-small">
-                        <div class="device-info">
-                            <div class="device-name">${device.name}</div>
-                            <div class="device-type">${device.model}</div>
-                            <div class="device-status">${device.status}</div>
-                        </div>
-                    `;
-
-                    // Add click event to connect to device
-                    deviceElement.addEventListener('click', () => {
-                        connectToDevice(device.id, device.name);
-                    });
-
-                    discoveredDevices.appendChild(deviceElement);
-                });
+                // Original code...
             })
             .catch(error => {
                 console.error('Error discovering devices:', error);
@@ -494,9 +812,10 @@ function initializeHomePage() {
                     </div>
                 `;
             });
+        */
     }
 
-    // Function to connect to a selected device
+    // Function to connect to a selected device - TEMPORARILY MOCKED
     function connectToDevice(deviceId, deviceName) {
         // Show connecting status
         const selectedDevice = document.querySelector(`[data-id="${deviceId}"]`);
@@ -505,7 +824,42 @@ function initializeHomePage() {
             statusEl.textContent = 'Connecting...';
         }
 
-        // Make actual API call to connect to the device
+        // TEMPORARY: Mock successful connection without API call
+        setTimeout(() => {
+            // Add to connected devices array
+            const existingDeviceIndex = connectedDevices.findIndex(d => d.id === deviceId);
+
+            if (existingDeviceIndex >= 0) {
+                // Update existing device
+                connectedDevices[existingDeviceIndex] = {
+                    id: deviceId,
+                    name: deviceName || deviceId
+                };
+            } else {
+                // Add new device
+                connectedDevices.push({
+                    id: deviceId,
+                    name: deviceName || deviceId
+                });
+            }
+
+            // Save to localStorage
+            saveConnectedDevices();
+
+            // For backward compatibility
+            localStorage.setItem('connectedDevice', deviceId);
+            localStorage.setItem('connectedDeviceName', deviceName || deviceId);
+
+            console.log("Device connected and saved:", deviceId);
+
+            // Update UI with all connected devices
+            refreshDeviceList();
+
+            // Close the modal
+            connectionModal.classList.remove('active');
+        }, 1500);
+
+        /* COMMENTED OUT: Real API call
         fetch(`/api/devices/connect`, {
             method: 'POST',
             headers: {
@@ -515,49 +869,16 @@ function initializeHomePage() {
         })
             .then(response => response.json())
             .then(data => {
-                if (data.success) {
-                    // Add to connected devices array
-                    const existingDeviceIndex = connectedDevices.findIndex(d => d.id === deviceId);
-
-                    if (existingDeviceIndex >= 0) {
-                        // Update existing device
-                        connectedDevices[existingDeviceIndex] = {
-                            id: deviceId,
-                            name: deviceName || deviceId
-                        };
-                    } else {
-                        // Add new device
-                        connectedDevices.push({
-                            id: deviceId,
-                            name: deviceName || deviceId
-                        });
-                    }
-
-                    // Save to localStorage
-                    saveConnectedDevices();
-
-                    // For backward compatibility
-                    localStorage.setItem('connectedDevice', deviceId);
-                    localStorage.setItem('connectedDeviceName', deviceName || deviceId);
-
-                    console.log("Device connected and saved:", deviceId);
-
-                    // Update UI with all connected devices
-                    refreshDeviceList();
-
-                    // Close the modal
-                    connectionModal.classList.remove('active');
-                } else {
-                    alert("Failed to connect to device. Please try again.");
-                }
+                // Original code...
             })
             .catch(error => {
                 console.error('Error connecting to device:', error);
                 alert("Connection error. Please check your network and try again.");
             });
+        */
     }
 
-    // Function to remove a device
+    // Function to remove a device - TEMPORARILY MOCKED
     function removeDevice(deviceId) {
         // Show confirmation dialog
         if (confirm(`Are you sure you want to disconnect ${deviceId}?`)) {
@@ -577,7 +898,8 @@ function initializeHomePage() {
             // Update UI
             refreshDeviceList();
 
-            // Notify server
+            // COMMENTED OUT: Real API call
+            /* 
             fetch(`/api/device/${deviceId}/disconnect`, {
                 method: 'POST',
                 headers: {
@@ -586,6 +908,7 @@ function initializeHomePage() {
             })
                 .then(response => response.json())
                 .catch(error => console.error('Error disconnecting device:', error));
+            */
         }
     }
 
@@ -676,7 +999,7 @@ function initializeHomePage() {
         }
     }
 
-    // Function to check device connection status
+    // Function to check device connection status - TEMPORARILY MOCKED
     function checkDeviceStatus(deviceId, deviceName) {
         const deviceCard = document.querySelector(`.device-card[data-id="${deviceId}"]`);
         const deviceStatusText = deviceCard ? deviceCard.querySelector('.device-status') : null;
@@ -684,31 +1007,21 @@ function initializeHomePage() {
 
         if (!deviceCard || !deviceStatusText) return;
 
-        // Make API call to check device status
+        // TEMPORARY: Mock device status as connected
+        deviceStatusText.textContent = "Connected via HTTP";
+        deviceCard.classList.add('connected');
+        deviceCard.classList.remove('disconnected');
+
+        // Update device image to active
+        if (deviceImage) {
+            deviceImage.src = "media/icons/ActiveDevice.png";
+        }
+
+        /* COMMENTED OUT: Real API call
         fetch(`/api/device/${deviceId}`)
             .then(response => response.json())
             .then(data => {
-                if (data && data.connected) {
-                    // Device is connected
-                    deviceStatusText.textContent = "Connected via HTTP";
-                    deviceCard.classList.add('connected');
-                    deviceCard.classList.remove('disconnected');
-
-                    // Update device image to active
-                    if (deviceImage) {
-                        deviceImage.src = "media/icons/ActiveDevice.png";
-                    }
-                } else {
-                    // Device exists but not currently connected
-                    deviceStatusText.textContent = "Device disconnected";
-                    deviceCard.classList.remove('connected');
-                    deviceCard.classList.add('disconnected');
-
-                    // Update device image to inactive
-                    if (deviceImage) {
-                        deviceImage.src = "media/icons/NotActiveDevice.png";
-                    }
-                }
+                // Original code...
             })
             .catch(error => {
                 console.error("Error checking device status:", error);
@@ -721,12 +1034,14 @@ function initializeHomePage() {
                     deviceImage.src = "media/icons/NotActiveDevice.png";
                 }
             });
+        */
     }
 
     // Initial refresh of device list
     refreshDeviceList();
 
-    // Set up periodic status checking for all devices (every 10 seconds)
+    // Comment out periodic status checking to avoid console errors
+    /*
     const statusCheckInterval = setInterval(() => {
         connectedDevices.forEach(device => {
             checkDeviceStatus(device.id, device.name);
@@ -737,6 +1052,7 @@ function initializeHomePage() {
     window.addEventListener('beforeunload', () => {
         clearInterval(statusCheckInterval);
     });
+    */
 }
 
 // Run initialization based on current page

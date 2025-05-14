@@ -418,22 +418,30 @@ select:disabled {
     display: flex;
     align-items: center;
     gap: 10px;
+    width: 100%;
 }
 
 .volume-slider {
     flex: 1;
-    /* Take remaining space */
-    margin-right: 0;
-    vertical-align: middle;
+    /* Take most of the available space */
 }
 
 .volume-value {
-    display: inline-block;
-    /* Show the volume indicator */
     width: 40px;
     /* Fixed width for the indicator */
     text-align: right;
     color: #666;
+    flex-shrink: 0;
+    /* Prevent the indicator from shrinking */
+}
+
+/* Add specific styling for intensity value to make it black */
+.intensity-value {
+    width: 40px;
+    text-align: right;
+    color: #666;
+    /* Black color for better visibility */
+    flex-shrink: 0;
 }
 
 /* Remove the popup styles as we're not using it anymore */
@@ -922,4 +930,154 @@ input[type="range"]::-moz-range-track {
     min-width: 48px;
     /* Minimum touch target size */
     min-height: 24px;
+}
+
+/* Primary Feature & Feature Dependencies Styles */
+.primary-feature {
+    border-left: 4px solid #f7a325;
+    /* Default orange color */
+    transition: border-color 0.3s ease;
+    /* Add transition for smooth color change */
+}
+
+/* New style for confirmed timer */
+.primary-feature.timer-confirmed {
+    border-left: 4px solid #4cd964;
+    /* Green color when confirmed */
+}
+
+.feature-dependent {
+    position: relative;
+    transition: all 0.3s ease;
+}
+
+.feature-dependent::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    /* Dark overlay */
+    border-radius: 15px;
+    z-index: 5;
+    transition: opacity 0.3s ease;
+}
+
+.dependency-notice {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 14px;
+    color: white;
+    background-color: rgba(0, 0, 0, 0.7);
+    padding: 5px 10px;
+    border-radius: 5px;
+    z-index: 6;
+    white-space: nowrap;
+    font-weight: bold;
+    pointer-events: none;
+    /* Allows clicks to pass through */
+    transition: opacity 0.3s ease;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.feature-dependent .toggle.dependent-disabled {
+    opacity: 0.7;
+    /* Slightly more visible within the shadowed card */
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.feature-card:not(.feature-dependent) .dependency-notice {
+    display: none;
+}
+
+.feature-dependent .toggle.dependent-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.feature-dependent .dependency-notice {
+    font-size: 12px;
+    color: #f7a325;
+    margin-right: 10px;
+}
+
+.confirm-button-wrapper {
+    display: flex;
+    justify-content: center;
+    margin-top: 10px;
+}
+
+.confirm-button {
+    background-color: #f7a325;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background-color 0.3s;
+}
+
+.confirm-button:hover {
+    background-color: #e5921c;
+}
+
+.confirm-button:disabled {
+    background-color: #cccccc;
+    cursor: not-allowed;
+}
+
+.confirm-button.confirmed {
+    background-color: #4cd964;
+}
+
+.timer-notification {
+    padding: 10px;
+    margin-bottom: 10px;
+    background-color: rgba(247, 163, 37, 0.1);
+    border-left: 3px solid #f7a325;
+    color: #333;
+    border-radius: 5px;
+}
+
+.timer-confirmation {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    background-color: rgba(76, 217, 100, 0.1);
+    border-left: 3px solid #4cd964;
+    margin-top: 15px;
+    border-radius: 5px;
+    opacity: 0;
+    height: 0;
+    transition: all 0.3s ease;
+    overflow: hidden;
+}
+
+.timer-confirmation.visible {
+    opacity: 1;
+    height: auto;
+    padding: 10px;
+}
+
+.confirmation-icon {
+    width: 24px;
+    height: 24px;
+    background-color: #4cd964;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 10px;
+}
+
+.confirmation-message {
+    color: #333;
+    font-size: 14px;
 }
